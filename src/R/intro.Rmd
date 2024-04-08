@@ -1,0 +1,25 @@
+---
+title: "sayHello"
+author: "Melvin van der Mark"
+date: "2024-04-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## sayHello function
+
+```{r sayhello function}
+sayHello <- function(){
+  print("Hello")
+}
+```
+
+## execute sayHello 
+
+```{r sayhello}
+sayHello()
+
+```
