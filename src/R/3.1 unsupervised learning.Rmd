@@ -1,0 +1,77 @@
+---
+title: "3.1 Unsupervised learning in R"
+output: html_notebook
+---
+
+# Unsupervised learning
+
+## Load in data and scale
+
+
+```{r}
+require(clusterCrit)
+require(gplots)
+require(fpc)
+
+setwd("C:/Users/m.vandermark/Desktop/studies/UMIT/Modul 12 - machine learning applications")
+food_data <- read.csv("./AMLHC_Tasks_MM/src/Data/food.csv", row.names = 1)
+
+fds <- scale(food_data)
+```
+## Clusting
+```{r}
+best_k <- 0
+best_silu <- -Inf
+for (k in 2:5) {
+  kmc <- kmeans(fds, centers =k)
+  ci <- intCriteria(fds,kmc$cluster, "Silhouette")
+  silhouette_value <- ci$silhouette
+   cat("Silhouette coefficient for k =", k, ":", silhouette_value, "\n")
+  if (silhouette_value > best_silu) {
+    best_k <- k
+    best_silu <- silhouette_value
+    }
+}
+  
+cat("\nFinal selected number of clusters:", best_k, "\n")
+
+```
+
+
+## Visualize
+```{r}
+
+pca <- princomp(fds)
+
+data_red <- pca$scores[,1:2]
+data_red <- data_red * -1
+plot(data_red[,"Comp.1"], data_red[,"Comp.2"])
+plot(data_red[,"Comp.1"], data_red[,"Comp.2"], col = kmc$cluster)
+text(data_red[,"Comp.1"], data_red[,"Comp.2"], labels = rownames(fds), cex = 0.5)
+
+```
+
+
+## Hierarchical clustering
+```{r}
+
+hfc <- hclust(dist(fds))
+plot(hfc)
+
+heatmap(fds)
+heatmap(fds, scale = "none")
+
+gplots::heatmap.2(fds, scale = "none")
+
+```
+
+## density based clustering
+```{r}
+
+dbc <- fpc::dbscan(fds, eps = 2, MinPts = 3)
+
+plot(data_red[,"Comp.1"], data_red[,"Comp.2"], col = dbc$cluster)
+text(data_red[,"Comp.1"], data_red[,"Comp.2"], labels = rownames(fds), cex = 0.5)
+
+
+```
