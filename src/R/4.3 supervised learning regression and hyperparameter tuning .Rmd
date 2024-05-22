@@ -1,0 +1,93 @@
+---
+title: "supervised learning in R"
+output: html_notebook
+---
+
+# Supervised learning - regression and hyperparameter tuning
+
+## Load in data and investigate data
+
+```{r}
+require(caret)
+```
+
+# Load dataset Blood-Brain
+```{r}
+data(BloodBrain)
+X <- bbbDescr #data frame of chemical descriptors
+y <- logBBB #vector of assay results
+```
+
+
+# Split the dataset into training (75%) and test (25%) sets
+- to get a realistic estimate of our performance after hyperparameter tuning
+
+```{r}
+set.seed(123)
+inTrain <- createDataPartition(y, p = 0.75, list = FALSE)
+X_train <- X[inTrain,]
+y_train <-y[inTrain]
+X_test <- X[-inTrain,]
+y_test <- y[-inTrain]
+```
+
+- Check splitting
+
+```{r}
+dim(X)
+dim(X_train)
+dim(X_test)
+```
+
+# Identify and exclude zero-variance predictors
+
+```{r}
+featVar <- apply(X_train, 2, var)
+zerovVarFeat <- featVar == 0
+sum(zerovVarFeat)
+X_train <- X_train[,!zerovVarFeat]
+X_test <- X_test[,!zerovVarFeat]
+```
+
+# Set up preprocessing (scaling/centering) and apply to the training data
+
+```{r}
+preProc <- preProcess(X_train, method = c("center", "scale"))
+X_train <- predict(preProc, X_train)
+```
+
+# Train and evaluate the model
+
+- learning method: random forest
+```{r}
+set.seed(123)
+trControl <- trainControl(method="cv", number=10)  #10-fold cross validation
+model_rf <- train(X_train, y_train, 
+                  method="rf",
+                  preProcess = c("center","scale"),
+                  trainControl=trControl)
+```
+
+# Analyze the performance values and feature importance
+
+```{r}
+model_rf
+importance <- varImp(model_rf)
+print(importance)
+best_rf <- model_rf$finalModel
+best_rf
+```
+
+# Apply preprocessing to the test data
+
+```{r}
+X_test <- predict(preProc, X_test)
+```
+
+# Predict on the test data using the final model (best_rf)
+
+```{r}
+y_predict <- predict(best_rf, X_test)
+results <- postResample(pred = y_predict, obs = y_test)
+print(results)
+```
