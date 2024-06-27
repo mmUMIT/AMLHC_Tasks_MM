@@ -6,8 +6,9 @@ output:
   rmdformats::material:
     use_bookdown: TRUE
     highlight: TRUE
-    includes:
-      in_header: custom.css
+    lightbox: TRUE
+
+    
 ---
 
 # Introduction
@@ -35,38 +36,50 @@ require(forcats)
 require(knitr)
 require(DT)
 require(ggplot2)
+require(caret)
+require(car)
+require(gtsummary)
+require(ResourceSelection)
+require(pROC)
 
-genes <- readxl::read_xlsx("gene_list.xlsx")
+genes <- readxl::read_xlsx("gene_list_small.xlsx")
 
 #create subset of relevant variables
 genes <- genes %>% select(patientnr, gender, yob, 
                            diagnose_group, diagnose, cycle, test_date, result_date,
-                           recs_y_n, alteration, type, details)
+                           alts_y_n, recs_y_n, alteration, type, details)
 
 ```
 
 ## Dataset
 
-The dataset dimensions are: `r dim(genes)[1]` observations and `r dim(genes)[2]` columns.  
+The dataset dimensions are: `r dim(genes)[1]` observations and `r dim(genes)[2]` columns.  <br>
+
+The dataset contains `r length(unique(genes$patientnr))` <br>
+- Patients with alterations `r length(unique(subset(genes, alts_y_n == 1)$patientnr))` <br>
+- Patients without alterations `r length(unique(subset(genes, alts_y_n == 0)$patientnr))` <br>
 
 The variables part of the dataset are described in more detail in the table below:
 
-| Variable Name   | Description                                                                                          | Role   |
-|-----------------|------------------------------------------------------------------------------------------------------|--------|
-| Patientnr       | unique identifier                                                                                    | Other  |
-| gender          | gender either "m" male "f" female                                                                    | Feature|
-| yob             | year of birth, only contains the year in 4 digits                                                    | Feature|
-| diagnose_group  | diagnosis grouped according to the ICD-10 classification                                             | Feature|
-| diagnose        | diagnosis, only solid tumor types included                                                           | Target |
-| cycle           | number of test, a patient can have multiple                                                          | Feature|
-| test_date       | Date the test was performed                                                                          | Feature|
-| result_date     | Date the test report was ready                                                                       | Feature|
-| recs_y_n        | Does the alteration bring specific recommendations yes or no                                         | Feature|
-| alteration      | Name of gene                                                                                         | Feature|
-| type            | Type of alteration found, abbreviated like mut (mutation), amp (amplification), loss                 | Feature|
-| details         | Details on the specific alteration, this can be for instance a protein                               | Feature|
+| Variable Name   | Description                                                                                          |
+|-----------------|------------------------------------------------------------------------------------------------------|
+| Patientnr       | unique identifier                                                                                    |
+| gender          | gender either "m" male "f" female                                                                    |
+| yob             | year of birth, only contains the year in 4 digits                                                    |
+| diagnose_group  | diagnosis grouped according to the ICD-10 classification                                             |
+| diagnose        | diagnosis, only solid tumor types included                                                           |
+| cycle           | number of test, a patient can have multiple                                                          |
+| test_date       | Date the test was performed                                                                          |
+| result_date     | Date the test report was ready                                                                       |
+| alts_y_n        | Did the test identify any alteration yes or no                                                       |
+| recs_y_n        | Does the alteration bring specific recommendations yes or no                                         |
+| alteration      | Name of gene                                                                                         |
+| type            | Type of alteration found, abbreviated like mut (mutation), amp (amplification), loss                 |
+| details         | Details on the specific alteration, this can be for instance a protein                               |
 
 # Data processing
+
+## ICD-10 Groups
 
 Below you find an overview of the data in table format.
 ```{r, data-pross-header, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
@@ -75,39 +88,47 @@ Below you find an overview of the data in table format.
 datatable(head(genes), options = list(pageLength = 10), caption = "Head of the Genes Dataframe")
 
 #identify rows with missing data
-missing_values <- genes %>% filter(if_any(everything(), ~ is.na(.x)))
+missing_values <- genes %>% filter(if_any(everything(), ~ is.na(.x) & alts_y_n == 1))
 #filter out rows with missing values
-genes_ <- na.omit(genes)
+genes_ <- genes %>% filter(!patientnr %in% missing_values$patientnr)
 
 ```
+
+***
 
 Before we can analyze the data we need to get an overview of frequencies and distributions.
 
 ```{r, data-pross-diagnosegroups, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE, fig_width=20, fig_height=12}
-#show distribution among ICD10 groups
+#show distribution of alterations among ICD10 groups
 genes_ %>% 
   mutate(diagnose_group = fct_rev(fct_infreq(diagnose_group))) %>% 
+  filter(alts_y_n == 1) %>% 
   ggplot(aes(x = diagnose_group)) + 
-  geom_bar() + 
+  geom_bar(fill = "steelblue") + 
   coord_flip() +
   geom_text(stat = 'count', aes(label = ..count..), hjust = -0.2) +
+  ylim(0, 1000) +
   labs(x = "ICD-10 Diagnosis groups", y = "Frequency of alterations", caption = "Figure 1: Distribution of alterations among ICD-10 groups") +
   theme_minimal()
 
 ```
 
+***
+
 It would seem that some groups are rather small
 
-```{r, data-pross-diagnosegroups-frequency, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE, fig.width=10, fig.height=6, fig.align='center'}
+```{r, data-pross-diagnosegroups-frequency, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
 
 #therefore remove groups with low N
 
 # Calculate the counts and percentages
 group_summary <- genes_ %>%
+  filter(alts_y_n == 1) %>% 
   mutate(fct_infreq(diagnose_group)) %>% 
   count(diagnose_group) %>%
   mutate(percentage = round(n / sum(n) * 100,2 )) %>% 
-  arrange(desc(n))
+  arrange(desc(n)) %>% 
+  mutate(N = row_number(), .before = diagnose_group)
 
 # Display the table using kable
 kable(group_summary, caption = "Counts and Percentages per Diagnose Group")
@@ -116,15 +137,116 @@ kable(group_summary, caption = "Counts and Percentages per Diagnose Group")
 group_summary_exclude <- group_summary %>% filter(percentage <= 2)
 genes_ <- genes %>% filter(!diagnose_group %in% group_summary_exclude$diagnose_group)
 
+
 ```
 
 
-## Data preparation
 
-Before training the model, several preprocessing steps were performed:
- * Handling missing values by removing rows with missing data, `r nrow(missing_values)` rows.
- * Converting all features to factors to facilitate modeling with a decision tree.
- * Removing empty and rare classes to ensure the model's robustness, leaving with `r length(unique(genes_$diagnose_group))` ICD-10 groups.
+Before training the model, several preprocessing steps were performed: <br>
+- Handling missing values by removing rows with missing data, `r nrow(missing_values)` rows. <br>
+- Converting all features to factors to facilitate modeling with a decision tree. <br>
+- Removing empty and rare classes to ensure the model's robustness, leaving with `r length(unique(genes_$diagnose_group))` ICD-10 groups.
+
+## Alterations
+
+
+# Analysis 1: logistic regression
+
+
+## Occurence of an alteration - logistic regression
+
+
+### The model
+```{r, data-ana-log, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
+
+#make factor
+genes_$diagnose_group <- fct_infreq(genes_$diagnose_group)
+genes_$gender <- factor(genes_$gender)
+
+# Split the data into training and test sets
+set.seed(123)  # For reproducibility
+trainIndex <- createDataPartition(genes_$alts_y_n, p = 0.7, list = FALSE, times = 1)
+trainData <- genes_[trainIndex, ]
+testData <- genes_[-trainIndex, ]
+
+testData$diagnose_group <- factor(testData$diagnose_group, levels = levels(trainData$diagnose_group))
+
+# Fit the logistic regression model
+model <- glm(alts_y_n ~ diagnose_group + gender + yob, data = trainData, family = binomial)
+
+# Summary of the model
+model %>% 
+  tbl_regression() %>% 
+  bold_labels() %>% 
+  bold_p()
+
+```
+
+### Evaluation
+
+```{r, data-ana-log2, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
+
+# Predict on test data
+predicted_probs <- predict(model, testData, type = "response")
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
+
+# Ensure predicted_classes and testData$alts_y_n are factors with the same levels
+testData$alts_y_n <- factor(testData$alts_y_n)  # Ensure testData$alts_y_n is a factor
+predicted_classes <- factor(predicted_classes, levels = levels(testData$alts_y_n))
+
+testData$alts_y_n <- factor(testData$alts_y_n, levels = c(0, 1))  # Ensure testData$alts_y_n is a factor with levels 0 and 1
+predicted_classes <- factor(predicted_classes, levels = c(0, 1))
+
+
+# Confusion Matrix
+conf_matrix <- confusionMatrix(predicted_classes, testData$alts_y_n)
+print(conf_matrix)
+
+# ROC Curve
+roc_curve <- roc(as.numeric(testData$alts_y_n), predicted_probs)
+plot(roc_curve)
+auc(roc_curve)
+
+# Check VIF for multicollinearity
+vif(model)
+
+```
+
+
+Considering the AUC is around 0.55, the model performs no better than random guessing. In addition, the ROC curve closely resembles a stepwise diagonal line, which further supports the poor performance of the model. 
+
+The Variance inflation factor (VIF) is a measure to detect multicollinearity in regression models. High VIF values indicate high multicollinearity between the predictor variables. The number of predictors suggest there is moderate to no multicollinearity between the predictors. 
+
+```{r, data-ana-log3, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
+# Check linearity of logits
+# trainData$logit <- log(predict(model, trainData, type = "response") / (1 - predict(model, trainData, type = "response")))
+# ggplot(trainData, aes(y = logit, x = yob)) + 
+#   geom_point() + 
+#   geom_smooth(method = "loess") + 
+#   labs(title = "Linearity of Logits", y = "Logit", x = "Year of Birth")
+
+# Hosmer-Lemeshow test
+#hoslem.test(trainData$alts_y_n, fitted(model))
+
+
+```
+
+
+# Analysis 1: logistic regression
+
+
+## Occurence of an alteration - logistic regression
+```{r, data-ana2-log, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
+
+
+
+
+
+
+
+```
+
+
 
 
 
