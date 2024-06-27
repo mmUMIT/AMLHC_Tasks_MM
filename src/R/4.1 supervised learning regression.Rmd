@@ -1,0 +1,104 @@
+---
+title: "Supervised learning in R"
+output: html_notebook
+---
+
+# Supervised learning
+
+## Load in data and investigate data
+
+
+```{r}
+
+
+setwd("C:/Users/m.vandermark/Desktop/studies/UMIT/Modul 12 - machine learning applications")
+health_data <- read.csv("./AMLHC_Tasks_MM/src/Data/heartdata.csv", row.names = 1)
+
+cor(health_data$biking, health_data$smoking)
+plot(health_data$biking, health_data$smoking)
+hist(health_data$biking)
+
+
+```
+```{r}
+
+
+plot(heartdisease ~ biking, data = health_data)
+plot(heartdisease ~ smoking, data = health_data)
+
+```
+
+
+## Linear regression
+
+### check assumptions
+
+```{r}
+correlation <- cor.test(health_data$biking, health_data$smoking)
+
+cat("The correlation between biking and smoking is:",correlation$estimate*100,"%")
+
+```
+### Normality
+```{r}
+hist(health_data$heartdisease, main = "Histogram of the dependent variable (heartdisease)")
+```
+
+- The distribution is a bell curve, so we can proceed with linear regression.
+
+### Linearity
+```{r}
+plot(heartdisease ~ biking, data=health_data, main = "Scatterplot of heartdisease vs. biking")
+plot(heartdisease ~smoking, data=health_data, main = "Scatterplot of heartdisease vs. smoking")
+
+```
+- Both variables display a linear relationship, so we can proceed with linear regression.
+
+### fit the model
+```{r}
+
+health_lm <- lm(heartdisease ~ biking, data = health_data)
+
+health_lm
+summary(health_lm)
+
+par(mfrow=c(2,2))
+plot(health_lm)
+```
+
+# Visualization 
+```{r}
+plot_data <- expand.grid(
+  biking = seq(min(data$biking), max(health_data$biking), length.out=30),
+  smoking=c(min(data$smoking), mean(health_data$smoking),max(health_data$smoking)))
+
+plot_data$predicted.y <- predict.lm(hd_lm, newdata = plot_data)
+plot_data$smoking <- round(plotting.data$smoking, digits = 2)
+plot_data$smoking <- as.factor(plotting.data$smoking)
+
+heart_plot <- ggplot(health_data, aes(x=biking, y=heartdisease)) +
+  geom_point() +
+  geom_line(data=plot_data, aes(x=biking, y=predicted.y, color=smoking), linewidth=1.25) +
+  theme_bw() +
+  labs(title = "Rates of heart disease (% of population) \n as a function of biking to work and smoking",
+      x = "Biking to work",
+      y = "Heart disease",
+      color = "Smoking")
+
+heart_plot
+```
+
+# Train the model
+```{r}
+set.seed(123)
+fitControl <- trainControl(method="cv",number =10)
+lmFit <- train(heartdisease ~., data=health_data, method = "lm", preProc=c("center","scale"), trControl = fitControl)
+lmFit
+```
+
+
+
+
+
+
+

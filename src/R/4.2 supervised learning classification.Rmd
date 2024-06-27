@@ -1,0 +1,58 @@
+---
+title: "supervised learning in R"
+output: html_notebook
+---
+
+# Supervised learning - classification
+
+## Load in data and investigate data
+
+
+```{r}
+library(foreign)
+library(caret)
+
+setwd("C:/Users/m.vandermark/Desktop/studies/UMIT/Modul 12 - machine learning applications")
+diabetes_data <- read.arff("diabetes.arff")
+
+#inspect
+head(diabetes_data)
+
+```
+
+# GLM Model
+
+```{r}
+diabetes_glm <- glm(class ~ . , data=diabetes_data, family = "binomial")
+diabetes_glm
+summary(diabetes_glm)
+```
+
+## plot 
+```{r}
+
+par(mfrow=c(2,2))
+plot(diabetes_glm)
+
+```
+
+
+# Train model
+
+```{r}
+fitControl <- trainControl(method="cv",number =10)
+glmFit <- train(class ~., data=diabetes_data, method = "glm", preProc=c("center","scale"), trControl = fitControl)
+glmFit
+
+glmFit2 <- train(class ~ preg + plas + pres + mass+ pedi,data=diabetes_data,method = "glm", preProc=c("center","scale"), trControl = fitControl)
+glmFit2
+
+```   
+
+##model comparison
+
+```{r}
+
+rbind(glmFit$results, glmFit2$results)
+
+```
