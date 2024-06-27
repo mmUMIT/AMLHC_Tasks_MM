@@ -41,13 +41,22 @@ require(car)
 require(gtsummary)
 require(ResourceSelection)
 require(pROC)
+require(e1071)
+require(nnet)
+require(glmnet)
+require(randomForest)
+require(gbm)
 
-genes <- readxl::read_xlsx("gene_list_small.xlsx")
+genes <- readxl::read_xlsx("testdata.xlsx")
 
 #create subset of relevant variables
-genes <- genes %>% select(patientnr, gender, yob, 
-                           diagnose_group, diagnose, cycle, test_date, result_date,
-                           alts_y_n, recs_y_n, alteration, type, details)
+genes <- genes %>% 
+  select(patientnr = patientNr, gender, yob, 
+                           diagnose_group = Diagnose_neu, diagnose = Diagnosis_details_dw, cycle = cycleNr_Test, test_date, result_date,
+                           alts_y_n = ALTS_y_n, recs_y_n = Recs_Original_y_n, alteration = all_ALTS, type = ALTS_type, details =ALTS_details
+         ) %>% 
+  mutate(alts_y_n = ifelse(alts_y_n == "yes",1,0),yob = as.numeric(yob))
+  
 
 ```
 
@@ -73,7 +82,7 @@ The variables part of the dataset are described in more detail in the table belo
 | result_date     | Date the test report was ready                                                                       |
 | alts_y_n        | Did the test identify any alteration yes or no                                                       |
 | recs_y_n        | Does the alteration bring specific recommendations yes or no                                         |
-| alteration      | Name of gene                                                                                         |
+| alteration      | Name of different genes                                                                                         |
 | type            | Type of alteration found, abbreviated like mut (mutation), amp (amplification), loss                 |
 | details         | Details on the specific alteration, this can be for instance a protein                               |
 
@@ -107,7 +116,7 @@ genes_ %>%
   geom_bar(fill = "steelblue") + 
   coord_flip() +
   geom_text(stat = 'count', aes(label = ..count..), hjust = -0.2) +
-  ylim(0, 1000) +
+  ylim(0, 250) +
   labs(x = "ICD-10 Diagnosis groups", y = "Frequency of alterations", caption = "Figure 1: Distribution of alterations among ICD-10 groups") +
   theme_minimal()
 
@@ -232,19 +241,93 @@ The Variance inflation factor (VIF) is a measure to detect multicollinearity in 
 ```
 
 
-# Analysis 1: logistic regression
+# Analysis 2: random forest
 
 
-## Occurence of an alteration - logistic regression
+## Occurence of an alteration - random forest
 ```{r, data-ana2-log, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
 
 
+# Check for missing values
+#print(sapply(genes_, function(x) sum(is.na(x))))
 
+# Split the data into training and test sets
+set.seed(123)  # For reproducibility
+trainIndex <- createDataPartition(genes_$alts_y_n, p = 0.7, list = FALSE, times = 1)
+trainData <- genes_[trainIndex, ]
+testData <- genes_[-trainIndex, ]
 
+# Check for missing values in training and test sets
+#print(sapply(trainData, function(x) sum(is.na(x))))
+#print(sapply(testData, function(x) sum(is.na(x))))
 
+# Ensure the levels of factors in testData match those in trainData
+testData$diagnose_group <- factor(testData$diagnose_group, levels = levels(trainData$diagnose_group))
+testData$gender <- factor(testData$gender, levels = levels(trainData$gender))
+
+# Remove rows with missing values
+trainData <- na.omit(trainData)
+testData <- na.omit(testData)
+
+# train a Random Forest model
+
+train_control <- trainControl(method = "boot", number = 25)
+
+# Train the Random Forest model
+rf_model <- train(
+  alts_y_n ~ diagnose_group + gender + yob,
+  data = trainData,
+  method = "rf",
+  trControl = train_control,
+  tuneLength = 10
+)
+rf_model
+
+# Get feature importance using varImp
+importance <- varImp(rf_model)
+
+# Plot feature importance
+plot(importance, top = 18)
+
+```
+There are different mtry, number of variables randomly sampled as candidates each split. However, RMSE, Rsquared and MAE are all 0 or NaN. meaning that the model could not be completed. One would normally choose the mtry value where the RMSE and MAE be lower and Rsquared higher for better model fit. 
+
+```{r, data-ana2-log, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
+
+# Make predictions
+rf_predictions <- predict(rf_model, testData)
+
+# Convert rf_predictions to a factor with the same levels as testData$Status
+rf_predictions <- factor(rf_predictions, levels = c(0,1))
+
+# Ensure testData$Status is a factor (if not already)
+testData$alts_y_n <- factor(testData$alts_y_n, levels = c(0,1))
+
+# Generate the confusion matrix
+conf_matrix <- confusionMatrix(rf_predictions, testData$alts_y_n)
+print(conf_matrix)
 
 
 ```
+
+The confusion matrix: <br>
+- True Positives (TP): 0 (model predicted 1, and it was 1). <br>
+- True Negatives (TN): 151 (model predicted 1, and it was 1). <br>
+- False Positives (FP): 0 (model predicted 0, but it was 1). <br>
+- False Negatives (FN): 0 (model predicted 1, but it was 0).<br>
+
+Since there is only one value of both the predictions and reference, which does not leave much to work with. 
+
+
+# Conclusion and next steps
+
+The question if it is possible to predict the possibility of finding an alteration based on the different ICD-10 groups. 
+
+Both models were no good fit, which might be cause of the dataset or the methods used. The logistic regression did not say any signficant predictor, and the random forest model did not provide more information.
+
+Next steps would be to explore other methods, or consider the dataset inappropriate.
+
+
 
 
 
