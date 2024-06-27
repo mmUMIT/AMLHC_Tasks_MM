@@ -6,6 +6,8 @@ output:
   rmdformats::material:
     use_bookdown: TRUE
     highlight: TRUE
+    includes:
+      in_header: custom.css
 ---
 
 # Introduction
@@ -29,6 +31,10 @@ ABL1, ABL2, ACVR1B, AKT1, AKT2, AKT3, ALK, AMER1 (FAM123B), APC, AR, ARAF, ARFRP
 require(rmdformats)
 require(rmarkdown)
 require(dplyr)
+require(forcats)
+require(knitr)
+require(DT)
+require(ggplot2)
 
 genes <- readxl::read_xlsx("gene_list.xlsx")
 
@@ -60,15 +66,65 @@ The variables part of the dataset are described in more detail in the table belo
 | type            | Type of alteration found, abbreviated like mut (mutation), amp (amplification), loss                 | Feature|
 | details         | Details on the specific alteration, this can be for instance a protein                               | Feature|
 
-# Data Preprocessing
+# Data processing
+
+Below you find an overview of the data in table format.
+```{r, data-pross-header, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
+
+#overview of data
+datatable(head(genes), options = list(pageLength = 10), caption = "Head of the Genes Dataframe")
+
+#identify rows with missing data
+missing_values <- genes %>% filter(if_any(everything(), ~ is.na(.x)))
+#filter out rows with missing values
+genes_ <- na.omit(genes)
+
+```
+
+Before we can analyze the data we need to get an overview of frequencies and distributions.
+
+```{r, data-pross-diagnosegroups, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE, fig_width=20, fig_height=12}
+#show distribution among ICD10 groups
+genes_ %>% 
+  mutate(diagnose_group = fct_rev(fct_infreq(diagnose_group))) %>% 
+  ggplot(aes(x = diagnose_group)) + 
+  geom_bar() + 
+  coord_flip() +
+  geom_text(stat = 'count', aes(label = ..count..), hjust = -0.2) +
+  labs(x = "ICD-10 Diagnosis groups", y = "Frequency of alterations", caption = "Figure 1: Distribution of alterations among ICD-10 groups") +
+  theme_minimal()
+
+```
+
+It would seem that some groups are rather small
+
+```{r, data-pross-diagnosegroups-frequency, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE, fig.width=10, fig.height=6, fig.align='center'}
+
+#therefore remove groups with low N
+
+# Calculate the counts and percentages
+group_summary <- genes_ %>%
+  mutate(fct_infreq(diagnose_group)) %>% 
+  count(diagnose_group) %>%
+  mutate(percentage = round(n / sum(n) * 100,2 )) %>% 
+  arrange(desc(n))
+
+# Display the table using kable
+kable(group_summary, caption = "Counts and Percentages per Diagnose Group")
+
+
+group_summary_exclude <- group_summary %>% filter(percentage <= 2)
+genes_ <- genes %>% filter(!diagnose_group %in% group_summary_exclude$diagnose_group)
+
+```
+
+
+## Data preparation
 
 Before training the model, several preprocessing steps were performed:
-- Handling missing values by removing rows with missing data.
-- Converting all features to factors to facilitate modeling with a decision tree.
-- Removing empty and rare classes to ensure the model's robustness.
-
-
-
+ * Handling missing values by removing rows with missing data, `r nrow(missing_values)` rows.
+ * Converting all features to factors to facilitate modeling with a decision tree.
+ * Removing empty and rare classes to ensure the model's robustness, leaving with `r length(unique(genes_$diagnose_group))` ICD-10 groups.
 
 
 
