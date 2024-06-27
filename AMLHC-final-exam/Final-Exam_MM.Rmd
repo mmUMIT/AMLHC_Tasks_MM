@@ -292,7 +292,7 @@ plot(importance, top = 18)
 ```
 There are different mtry, number of variables randomly sampled as candidates each split. However, RMSE, Rsquared and MAE are all 0 or NaN. meaning that the model could not be completed. One would normally choose the mtry value where the RMSE and MAE be lower and Rsquared higher for better model fit. 
 
-```{r, data-ana2-log, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
+```{r, data-ana2-log2, include=TRUE, echo = FALSE,warning=FALSE,message=FALSE}
 
 # Make predictions
 rf_predictions <- predict(rf_model, testData)
