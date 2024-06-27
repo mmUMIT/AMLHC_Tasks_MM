@@ -1,0 +1,41 @@
+---
+title: "Ssupervised learning in R"
+output: html_notebook
+---
+
+# Supervised learning
+
+## Load in data and investigate data
+
+
+```{r}
+
+
+setwd("C:/Users/m.vandermark/Desktop/studies/UMIT/Modul 12 - machine learning applications")
+health_data <- read.csv("./AMLHC_Tasks_MM/src/Data/heartdata.csv", row.names = 1)
+
+cor(health_data$biking, health_data$smoking)
+plot(health_data$biking, health_data$smoking)
+hist(health_data$biking)
+
+
+```
+```{r}
+
+
+plot(heartdisease ~ biking, data = health_data)
+plot(heartdisease ~ smoking, data = health_data)
+
+```
+
+
+## Linear regression
+
+```{r}
+
+health_lm <- lm(heartdisease ~ biking, data = health_data)
+
+health_lm
+summary(health_lm)
+
+```
