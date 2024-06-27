@@ -1,0 +1,11 @@
+---
+title: "Final Exam - module 12"
+author: "Melvin van der Mark"
+date: "27-June-2024"
+output: html_notebook
+---
+
+# Introduction
+
+Precision medicine is becoming increasinly relevant in the field of oncology. Comprehensive genomic profiling allows for the detailed analysis of tumor tissue. New methods such as next-generation sequencing can identify various type of alterations such as: mutations, amplifications, rearragements, fusions and more. The identification of these alterations can help with treatment decisions in the field of targeted therapy. These therapies target the specific alterations found.
+
